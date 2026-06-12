@@ -1,0 +1,6 @@
+{
+  "name": "YT Playlist Transcript Extractor",
+  "description": "Extrai as transcrições de todos os vídeos de uma playlist do YouTube e organiza em formato de tabela.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
