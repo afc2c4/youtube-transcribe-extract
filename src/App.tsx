@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { PlaylistResponse, VideoResult } from './types';
 import { Header } from './components/Header';
 import { PlaylistInput } from './components/PlaylistInput';
@@ -10,6 +10,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlaylistResponse | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [template, setTemplate] = useState(() => {
+    return localStorage.getItem('transcriptTemplate') || 'A transcrição é {transcript}';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('transcriptTemplate', template);
+  }, [template]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +50,7 @@ export default function App() {
 
   const handleCopy = (video: VideoResult) => {
     if (!video.transcript) return;
-    const formattedText = `A transcrição é ${video.transcript}`;
+    const formattedText = template.split('{transcript}').join(video.transcript);
     navigator.clipboard.writeText(formattedText);
     setCopiedId(video.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -56,32 +63,6 @@ export default function App() {
     const a = document.createElement('a');
     a.href = dlUrl;
     a.download = `${video.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_transcript.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(dlUrl);
-  };
-
-  const handleDownloadAll = () => {
-    if (!data) return;
-    let combined = `Playlist: ${data.playlistTitle}\n\n`;
-    
-    data.videos.forEach(v => {
-      combined += `--- ${v.title} ---\n`;
-      combined += `URL: ${v.url}\n`;
-      combined += `Duração: ${v.duration}\n`;
-      if (v.transcript) {
-         combined += `Transcrição:\n${v.transcript}\n\n`;
-      } else {
-         combined += `[Sem Transcrição Disponível: ${v.error}]\n\n`;
-      }
-    });
-
-    const blob = new Blob([combined], { type: 'text/plain' });
-    const dlUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = dlUrl;
-    a.download = `${data.playlistTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_all_transcripts.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -103,9 +84,10 @@ export default function App() {
           <ResultsSection 
             data={data}
             copiedId={copiedId}
+            template={template}
+            setTemplate={setTemplate}
             onCopy={handleCopy}
             onDownloadTxt={handleDownloadTxt}
-            onDownloadAll={handleDownloadAll}
           />
         )}
       </main>

@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { YoutubeTranscript } from "youtube-transcript";
+import ytpl from "ytpl";
 
 async function fetchPlaylist(inputUrl: string) {
   let listId = "";
@@ -42,66 +43,36 @@ async function fetchPlaylist(inputUrl: string) {
     throw new Error("Invalid playlist URL");
   }
 
-  const html = await (await fetch(`https://www.youtube.com/playlist?list=${listId}`)).text();
-  const match = html.match(/var ytInitialData = (\{.*?\});<\/script>/);
-  if (!match) throw new Error("Could not find playlist data (the playlist may be private or invalid)");
-  
-  const data = JSON.parse(match[1]);
-  if (!data.contents?.twoColumnBrowseResultsRenderer) {
-      throw new Error("Could not parse YouTube playlist layout (structure changed)");
+  try {
+    const playlist = await ytpl(listId, { limit: 20 });
+    return {
+      title: playlist.title,
+      items: playlist.items.map(item => ({
+        id: item.id,
+        title: item.title,
+        shortUrl: item.shortUrl,
+        bestThumbnail: item.bestThumbnail || { url: `https://img.youtube.com/vi/${item.id}/hqdefault.jpg` },
+        author: { name: item.author?.name || "Unknown" },
+        duration: item.duration || "-"
+      }))
+    };
+  } catch (err: any) {
+    // Se a playlist falhar, mas tivermos um videoId, tentamos fallback para vídeo único
+    if (videoId) {
+      return {
+        title: "Vídeo Único",
+        items: [{
+          id: videoId,
+          title: "Vídeo Adicionado (Buscando Transcrição...)",
+          shortUrl: `https://youtu.be/${videoId}`,
+          bestThumbnail: { url: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` },
+          author: { name: "YouTube Video" },
+          duration: "-"
+        }]
+      };
+    }
+    throw new Error(`Failed to fetch playlist: ${err.message}`);
   }
-
-  const title = data.metadata?.playlistMetadataRenderer?.title || data.header?.playlistHeaderRenderer?.title?.simpleText || data.microformat?.microformatDataRenderer?.title || "Unknown Playlist";
-  
-  const content = data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content;
-  const sectionList = content.sectionListRenderer;
-  if (!sectionList || !sectionList.contents || !sectionList.contents[0]) throw new Error("Could not find sectionList");
-  const itemSection = sectionList.contents[0].itemSectionRenderer;
-  if (!itemSection) throw new Error("Could not find video list");
-
-  let items = [];
-  // Support both old playlistVideoListRenderer and new lockupViewModel
-  if (itemSection.contents[0]?.playlistVideoListRenderer) {
-      const vids = itemSection.contents[0].playlistVideoListRenderer.contents;
-      for (const v of vids) {
-          if (v.playlistVideoRenderer) {
-              const r = v.playlistVideoRenderer;
-              items.push({
-                 id: r.videoId,
-                 title: r.title?.runs?.[0]?.text || r.title?.simpleText || "Unknown",
-                 shortUrl: `https://youtu.be/${r.videoId}`,
-                 bestThumbnail: { url: r.thumbnail?.thumbnails?.[r.thumbnail.thumbnails.length - 1]?.url },
-                 author: { name: r.shortBylineText?.runs?.[0]?.text },
-                 duration: r.lengthText?.simpleText
-              });
-          }
-      }
-  } else {
-     // lockupViewModel
-     const vids = itemSection.contents.filter((i: any) => i.lockupViewModel).map((i: any) => i.lockupViewModel);
-     for (const vm of vids) {
-        let titleContent = "Unknown";
-        if (vm.metadata?.lockupMetadataViewModel?.title?.content) {
-            titleContent = vm.metadata.lockupMetadataViewModel.title.content;
-        }
-        
-        let authorName = "Unknown";
-        try {
-            authorName = vm.metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows[0].metadataParts[0].text.content;
-        } catch(e){}
-        
-        items.push({
-           id: vm.contentId,
-           title: titleContent,
-           shortUrl: `https://youtu.be/${vm.contentId}`,
-           bestThumbnail: { url: vm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url || "" },
-           author: { name: authorName },
-           duration: "N/A"
-        });
-     }
-  }
-  
-  return { title, items: items.slice(0, 20) };
 }
 
 async function startServer() {

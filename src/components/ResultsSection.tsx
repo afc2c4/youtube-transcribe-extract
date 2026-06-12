@@ -1,22 +1,32 @@
-import React from 'react';
-import { Download, PlayCircle, FileText, Copy, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { PlayCircle, FileText, Copy, Check, Settings, X, Save } from 'lucide-react';
 import type { PlaylistResponse, VideoResult } from '../types';
 
 interface ResultsSectionProps {
   data: PlaylistResponse;
   copiedId: string | null;
+  template: string;
+  setTemplate: (value: string) => void;
   onCopy: (video: VideoResult) => void;
   onDownloadTxt: (video: VideoResult) => void;
-  onDownloadAll: () => void;
 }
 
 export function ResultsSection({ 
   data, 
-  copiedId, 
+  copiedId,
+  template,
+  setTemplate,
   onCopy, 
-  onDownloadTxt, 
-  onDownloadAll 
+  onDownloadTxt
 }: ResultsSectionProps) {
+  const [isEditingTemplate, setIsEditingTemplate] = useState(false);
+  const [tempTemplate, setTempTemplate] = useState(template);
+
+  const handleSaveTemplate = () => {
+    setTemplate(tempTemplate);
+    setIsEditingTemplate(false);
+  };
+
   return (
     <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-[#121214] rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
       <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/20 border-b border-slate-800">
@@ -24,14 +34,53 @@ export function ResultsSection({
           <h3 className="font-medium text-lg text-white line-clamp-1">{data.playlistTitle}</h3>
           <p className="text-xs text-slate-500 uppercase font-bold tracking-widest mt-1">{data.videos.length} vídeos extraídos</p>
         </div>
-        <button 
-          onClick={onDownloadAll}
-          className="inline-flex items-center gap-2 px-6 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium rounded-2xl transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Baixar Tudo
-        </button>
+        {!isEditingTemplate && (
+          <button 
+            onClick={() => {
+              setTempTemplate(template);
+              setIsEditingTemplate(true);
+            }}
+            className="inline-flex items-center gap-2 px-6 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium rounded-2xl transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+            Editar Formato
+          </button>
+        )}
       </div>
+
+      {isEditingTemplate && (
+        <div className="p-6 bg-[#0A0A0B] border-b border-slate-800">
+          <label className="block text-sm font-medium text-slate-400 mb-2">
+            Formato do Texto Copiado
+          </label>
+          <p className="text-xs text-slate-500 mb-4">
+            Use <code className="text-indigo-400 font-mono px-1 py-0.5 bg-indigo-500/10 rounded">{'{transcript}'}</code> para indicar onde a transcrição deve ser inserida.
+          </p>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={tempTemplate}
+              onChange={(e) => setTempTemplate(e.target.value)}
+              className="flex-1 bg-[#121214] border border-slate-700 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+              placeholder="Ex: A transcrição é {transcript}"
+            />
+            <button
+              onClick={handleSaveTemplate}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              Salvar
+            </button>
+            <button
+              onClick={() => setIsEditingTemplate(false)}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-sm font-medium transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="w-full overflow-hidden">
         <table className="w-full text-left border-collapse table-fixed">
@@ -99,7 +148,7 @@ export function ResultsSection({
                     <div className="group relative">
                       <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap">
                         <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300 pr-6 break-words">
-                           A transcrição é {video.transcript}
+                          {template.split('{transcript}').join(video.transcript)}
                         </p>
                       </div>
                       <button
