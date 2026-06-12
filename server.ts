@@ -4,13 +4,40 @@ import { createServer as createViteServer } from "vite";
 import { YoutubeTranscript } from "youtube-transcript";
 
 async function fetchPlaylist(inputUrl: string) {
-  let listId = inputUrl;
+  let listId = "";
+  let videoId = "";
+  
   if (inputUrl.includes("http")) {
     try {
       const urlObj = new URL(inputUrl);
       listId = urlObj.searchParams.get("list") || "";
+      videoId = urlObj.searchParams.get("v") || "";
+      if (urlObj.hostname === "youtu.be") {
+         videoId = urlObj.pathname.slice(1);
+      }
     } catch(e) {}
+  } else {
+    if (inputUrl.length === 11) {
+      videoId = inputUrl;
+    } else {
+      listId = inputUrl;
+    }
   }
+
+  if (videoId && !listId) {
+    return {
+      title: "Vídeo Único",
+      items: [{
+        id: videoId,
+        title: "Vídeo Adicionado (Buscando Transcrição...)",
+        shortUrl: `https://youtu.be/${videoId}`,
+        bestThumbnail: { url: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` },
+        author: { name: "YouTube Video" },
+        duration: "-"
+      }]
+    };
+  }
+
   if (!listId) {
     throw new Error("Invalid playlist URL");
   }
