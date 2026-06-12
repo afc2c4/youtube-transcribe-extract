@@ -155,6 +155,7 @@ export default function App() {
                     <th className="px-6 py-4 min-w-[120px]">Canal</th>
                     <th className="px-6 py-4 min-w-[100px]">Duração</th>
                     <th className="px-6 py-4 min-w-[400px]">Transcrição</th>
+                    <th className="px-6 py-4 min-w-[400px]">Texto Formatado</th>
                     <th className="px-6 py-4 text-right min-w-[120px]">Ações</th>
                   </tr>
                 </thead>
@@ -200,6 +201,18 @@ export default function App() {
                           <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed">
                             <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300">
                                {video.transcript}
+                            </p>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 align-top group">
+                        {video.error ? (
+                          <div className="text-sm text-slate-600">-</div>
+                        ) : (
+                          <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                            <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300">
+                               A transcrição é {video.transcript}
                             </p>
                           </div>
                         )}
