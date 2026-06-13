@@ -119,7 +119,9 @@ export default function App() {
 
   const handleCopy = (video: VideoResult) => {
     if (!video.transcript) return;
-    const formattedText = template.split('{transcript}').join(video.transcript);
+    const formattedText = template
+      .split('{transcript}').join(video.transcript)
+      .split('{titulo}').join(video.title);
     navigator.clipboard.writeText(formattedText);
     setCopiedId(video.id);
     setTimeout(() => setCopiedId(null), 2000);

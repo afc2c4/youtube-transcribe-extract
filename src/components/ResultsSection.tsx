@@ -54,7 +54,7 @@ export function ResultsSection({
             Formato do Texto Copiado
           </label>
           <p className="text-xs text-slate-500 mb-4">
-            Use <code className="text-indigo-400 font-mono px-1 py-0.5 bg-indigo-500/10 rounded">{'{transcript}'}</code> para indicar onde a transcrição deve ser inserida.
+            Use <code className="text-indigo-400 font-mono px-1 py-0.5 bg-indigo-500/10 rounded">{'{transcript}'}</code> para inserir a transcrição e <code className="text-indigo-400 font-mono px-1 py-0.5 bg-indigo-500/10 rounded">{'{titulo}'}</code> para o título do vídeo.
           </p>
           <div className="flex gap-3">
             <input
@@ -148,7 +148,7 @@ export function ResultsSection({
                     <div className="group relative">
                       <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap">
                         <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300 pr-6 break-words">
-                          {template.split('{transcript}').join(video.transcript)}
+                          {template.split('{transcript}').join(video.transcript || '').split('{titulo}').join(video.title)}
                         </p>
                       </div>
                       <button
