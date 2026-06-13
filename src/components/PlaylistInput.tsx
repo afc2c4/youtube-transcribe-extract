@@ -5,15 +5,19 @@ interface PlaylistInputProps {
   url: string;
   setUrl: (url: string) => void;
   loading: boolean;
+  progress: number;
+  total: number;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
 }
 
-export function PlaylistInput({ url, setUrl, loading, error, onSubmit }: PlaylistInputProps) {
+export function PlaylistInput({ url, setUrl, loading, progress, total, error, onSubmit }: PlaylistInputProps) {
+  const percentage = total > 0 ? Math.round((progress / total) * 100) : 0;
+
   return (
     <section className="bg-[#121214] rounded-2xl border border-slate-800 p-6 mb-8 max-w-3xl">
       <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Analisar Playlist</h2>
-      <p className="text-slate-400 mb-6 text-sm">Insira o link de uma playlist do YouTube. Obteremos os vídeos e extrairemos as transcrições disponíveis automaticamente. (Limita a 20 vídeos para performance).</p>
+      <p className="text-slate-400 mb-6 text-sm">Insira o link de uma playlist do YouTube. Obteremos os vídeos e extrairemos as transcrições disponíveis automaticamente. (Limita a 100 vídeos para performance).</p>
       
       <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -29,19 +33,34 @@ export function PlaylistInput({ url, setUrl, loading, error, onSubmit }: Playlis
         </div>
         <button
           type="submit"
-          disabled={loading || !url.trim()}
+          disabled={loading || (total > 0 && progress < total) || !url.trim()}
           className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-xl shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 whitespace-nowrap"
         >
-          {loading ? (
+          {loading || (total > 0 && progress < total) ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Processando...
+              {loading ? 'Buscando info...' : 'Baixando...'}
             </>
           ) : (
             'Extrair Dados'
           )}
         </button>
       </form>
+
+      {total > 0 && (progress < total) && (
+        <div className="mt-6">
+          <div className="flex justify-between text-sm mb-2 text-slate-400 font-medium">
+             <span>Baixando transcrições...</span>
+             <span>{progress} / {total} ({percentage}%)</span>
+          </div>
+          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div 
+              className="bg-indigo-500 h-2 rounded-full transition-all duration-300 ease-out" 
+              style={{ width: `${percentage}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {error && (
          <div className="mt-4 p-4 bg-red-900/20 text-red-400 rounded-xl border border-red-900/50 flex items-start gap-3 text-sm">

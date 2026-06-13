@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { YoutubeTranscript } from "youtube-transcript";
-import ytpl from "ytpl";
 
 async function fetchPlaylist(inputUrl: string) {
   let listId = "";
@@ -44,23 +43,83 @@ async function fetchPlaylist(inputUrl: string) {
   }
 
   try {
-    const playlist = await ytpl(listId, { limit: 20 });
-    return {
-      title: playlist.title,
-      items: playlist.items.map(item => ({
-        id: item.id,
-        title: item.title,
-        shortUrl: item.shortUrl,
-        bestThumbnail: item.bestThumbnail || { url: `https://img.youtube.com/vi/${item.id}/hqdefault.jpg` },
-        author: { name: item.author?.name || "Unknown" },
-        duration: item.duration || "-"
-      }))
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Cookie": "SOCS=CAI; CONSENT=YES+cb.20230101-00-p0.en+FX+000;"
     };
+    const html = await (await fetch(`https://www.youtube.com/playlist?list=${listId}`, { headers })).text();
+    
+    const startString = "var ytInitialData = ";
+    const startIndex = html.indexOf(startString);
+    if (startIndex === -1) {
+       throw new Error("Página HTML não possui ytInitialData");
+    }
+    let jsonString = html.substring(startIndex + startString.length);
+    const endIndex = jsonString.indexOf(";</script>");
+    if (endIndex !== -1) {
+      jsonString = jsonString.substring(0, endIndex);
+    }
+    
+    const data = JSON.parse(jsonString);
+
+    if (!data.contents?.twoColumnBrowseResultsRenderer) {
+      if (listId.startsWith("RD")) {
+         throw new Error("Mixes de YouTube necessitam uso pelo formato de vídeo único com as transcrições individuais.");
+      }
+      throw new Error("Formato de playlist inesperado (talvez seja privada ou a estrutura mudou)");
+    }
+
+    const title = data.metadata?.playlistMetadataRenderer?.title || data.header?.playlistHeaderRenderer?.title?.simpleText || data.microformat?.microformatDataRenderer?.title || "Playlist Desconhecida";
+    
+    const content = data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content;
+    const sectionList = content.sectionListRenderer;
+    if (!sectionList || !sectionList.contents || !sectionList.contents[0]) throw new Error("Lista de seções não encontrada");
+    const itemSection = sectionList.contents[0].itemSectionRenderer;
+    if (!itemSection || !itemSection.contents) throw new Error("Vídeos não encontrados na seção");
+
+    let items = [];
+    const videosContainer = itemSection.contents[0]?.playlistVideoListRenderer?.contents || itemSection.contents;
+    
+    for (const item of videosContainer) {
+        if (item.playlistVideoRenderer) {
+            const r = item.playlistVideoRenderer;
+            items.push({
+               id: r.videoId,
+               title: r.title?.runs?.[0]?.text || r.title?.simpleText || "Desconhecido",
+               shortUrl: `https://youtu.be/${r.videoId}`,
+               bestThumbnail: { url: r.thumbnail?.thumbnails?.[r.thumbnail.thumbnails.length - 1]?.url },
+               author: { name: r.shortBylineText?.runs?.[0]?.text },
+               duration: r.lengthText?.simpleText
+            });
+        } else if (item.lockupViewModel) {
+            const vm = item.lockupViewModel;
+            let titleContent = "Desconhecido";
+            if (vm.metadata?.lockupMetadataViewModel?.title?.content) {
+                titleContent = vm.metadata.lockupMetadataViewModel.title.content;
+            }
+            
+            let authorName = "Desconhecido";
+            try {
+                authorName = vm.metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows[0].metadataParts[0].text.content;
+            } catch(e){}
+            
+            items.push({
+               id: vm.contentId,
+               title: titleContent,
+               shortUrl: `https://youtu.be/${vm.contentId}`,
+               bestThumbnail: { url: vm.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url || "" },
+               author: { name: authorName },
+               duration: "N/A"
+            });
+        }
+    }
+
+    return { title, items: items.slice(0, 100) };
+    
   } catch (err: any) {
-    // Se a playlist falhar, mas tivermos um videoId, tentamos fallback para vídeo único
     if (videoId) {
       return {
-        title: "Vídeo Único",
+        title: "Vídeo Único (Fallback)",
         items: [{
           id: videoId,
           title: "Vídeo Adicionado (Buscando Transcrição...)",
@@ -81,56 +140,41 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API endpoint
-  app.post("/api/playlist/transcripts", async (req, res) => {
+  app.post("/api/playlist/info", async (req, res) => {
     try {
       const { playlistUrl } = req.body;
       if (!playlistUrl) {
         return res.status(400).json({ error: "Playlist URL is required" });
       }
-
       const playlist = await fetchPlaylist(playlistUrl);
-      console.log(`Fetched playlist details, ${playlist.items.length} items found.`);
-
-      const results = [];
-
-      for (const item of playlist.items) {
-        let transcript = null;
-        let transcriptText = "";
-        let error = null;
-
-        try {
-          console.log(`Fetching transcript for ${item.id} - ${item.title}`);
-          const transcriptData = await YoutubeTranscript.fetchTranscript(item.id);
-          transcriptText = transcriptData.map((t) => t.text).join(" ");
-        } catch (err: any) {
-          console.error(`Failed to fetch transcript for ${item.id}:`, err.message);
-          if (err.message.includes("Transcript is disabled")) {
-            error = "O YouTube bloqueou o acesso à transcrição para este IP (proteção anti-bot). As transcrições automáticas não podem ser acessadas por servidores Cloud no momento.";
-          } else {
-            error = "Transcrição indisponível ou inacessível.";
-          }
-        }
-
-        results.push({
-          id: item.id,
-          title: item.title,
-          url: item.shortUrl,
-          thumbnail: item.bestThumbnail?.url || "",
-          author: item.author?.name || "Unknown",
-          duration: item.duration || "N/A",
-          transcript: transcriptText,
-          error: error
-        });
-      }
-
-      res.json({
-        playlistTitle: playlist.title,
-        videos: results
-      });
+      res.json(playlist);
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ error: err.message || "Something went wrong fetching the playlist" });
+    }
+  });
+
+  app.post("/api/video/transcript", async (req, res) => {
+    try {
+      const { videoId } = req.body;
+      if (!videoId) {
+        return res.status(400).json({ error: "videoId is required" });
+      }
+      let transcriptText = "";
+      let error = null;
+      try {
+        const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+        transcriptText = transcriptData.map((t) => t.text).join(" ");
+      } catch (err: any) {
+        if (err.message.includes("Transcript is disabled")) {
+          error = "O YouTube bloqueou o acesso à transcrição para este IP (proteção anti-bot). As transcrições automáticas não podem ser acessadas por servidores Cloud no momento.";
+        } else {
+          error = "Transcrição indisponível ou inacessível.";
+        }
+      }
+      res.json({ transcript: transcriptText, error });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

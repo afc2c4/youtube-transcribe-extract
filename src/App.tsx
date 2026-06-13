@@ -7,6 +7,8 @@ import { ResultsSection } from './components/ResultsSection';
 export default function App() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlaylistResponse | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -23,12 +25,14 @@ export default function App() {
     if (!url.trim()) return;
 
     setLoading(true);
+    setProgress(0);
+    setTotal(0);
     setError(null);
     setData(null);
     setCopiedId(null);
 
     try {
-      const response = await fetch('/api/playlist/transcripts', {
+      const response = await fetch('/api/playlist/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlistUrl: url.trim() }),
@@ -37,13 +41,78 @@ export default function App() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to fetch transcripts');
+        throw new Error(result.error || 'Failed to fetch playlist info');
       }
 
-      setData(result);
+      setLoading(false);
+
+      const items = result.items || [];
+      if (items.length === 0) {
+        throw new Error('Nenhum vídeo encontrado nesta playlist.');
+      }
+
+      setTotal(items.length);
+
+      const initialVideos: VideoResult[] = items.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        url: item.shortUrl,
+        thumbnail: item.bestThumbnail?.url || "",
+        author: item.author?.name || "Unknown",
+        duration: item.duration || "-",
+        transcript: null,
+        error: "⏳ Baixando transcrição...",
+      }));
+
+      setData({ playlistTitle: result.title, videos: initialVideos });
+
+      let completedCount = 0;
+      const BATCH_SIZE = 5;
+
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (item: any) => {
+            try {
+              const res = await fetch('/api/video/transcript', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoId: item.id }),
+              });
+              const tData = await res.json();
+
+              setData(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  videos: prev.videos.map(v => 
+                    v.id === item.id 
+                      ? { ...v, transcript: tData.transcript || null, error: tData.error || null } 
+                      : v
+                  )
+                };
+              });
+            } catch (err: any) {
+              setData(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  videos: prev.videos.map(v => 
+                    v.id === item.id 
+                      ? { ...v, error: err.message || 'Erro ao processar' } 
+                      : v
+                  )
+                };
+              });
+            } finally {
+              completedCount++;
+              setProgress(completedCount);
+            }
+          })
+        );
+      }
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -76,7 +145,9 @@ export default function App() {
         <PlaylistInput 
           url={url} 
           setUrl={setUrl} 
-          loading={loading} 
+          loading={loading}
+          progress={progress}
+          total={total}
           error={error} 
           onSubmit={handleSubmit} 
         />
