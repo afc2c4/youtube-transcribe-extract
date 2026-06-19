@@ -117,19 +117,25 @@ export default function App() {
     }
   };
 
-  const handleCopy = (video: VideoResult) => {
+  const handleCopy = (video: VideoResult, blockIndex?: number) => {
     if (!video.transcript) return;
+    const textToInsert = typeof blockIndex === 'number' && Array.isArray(video.transcript) 
+      ? video.transcript[blockIndex] 
+      : (Array.isArray(video.transcript) ? video.transcript.join(' ') : video.transcript);
+      
     const formattedText = template
-      .split('{transcript}').join(video.transcript)
+      .split('{transcript}').join(textToInsert)
       .split('{titulo}').join(video.title);
     navigator.clipboard.writeText(formattedText);
-    setCopiedId(video.id);
+    const copyId = typeof blockIndex === 'number' ? `${video.id}-${blockIndex}` : video.id;
+    setCopiedId(copyId);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleDownloadTxt = (video: VideoResult) => {
     if (!video.transcript) return;
-    const blob = new Blob([video.transcript], { type: 'text/plain' });
+    const textToDownload = Array.isArray(video.transcript) ? video.transcript.join('\n\n---\n\n') : video.transcript;
+    const blob = new Blob([textToDownload], { type: 'text/plain' });
     const dlUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = dlUrl;

@@ -160,11 +160,11 @@ async function startServer() {
       if (!videoId) {
         return res.status(400).json({ error: "videoId is required" });
       }
-      let transcriptText = "";
+      let transcriptOriginal = null;
       let error = null;
       try {
         const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
-        transcriptText = transcriptData.map((t) => t.text).join(" ");
+        transcriptOriginal = transcriptData;
       } catch (err: any) {
         if (err.message.includes("Transcript is disabled")) {
           error = "O YouTube bloqueou o acesso à transcrição para este IP (proteção anti-bot). As transcrições automáticas não podem ser acessadas por servidores Cloud no momento.";
@@ -172,7 +172,30 @@ async function startServer() {
           error = "Transcrição indisponível ou inacessível.";
         }
       }
-      res.json({ transcript: transcriptText, error });
+
+      let transcriptsToReturn: string[] = [];
+      if (transcriptOriginal && transcriptOriginal.length > 0) {
+        // Splitting into 15 minutes chunks
+        const averageDelta = transcriptOriginal[transcriptOriginal.length - 1].offset / transcriptOriginal.length;
+        const isMs = averageDelta > 50; 
+        const CHUNK_LIMIT = isMs ? 15 * 60 * 1000 : 15 * 60;
+        
+        let currentChunkText: string[] = [];
+        let currentChunkStart = 0;
+        for (const line of transcriptOriginal) {
+          if (line.offset - currentChunkStart > CHUNK_LIMIT && currentChunkText.length > 0) {
+            transcriptsToReturn.push(currentChunkText.join(" "));
+            currentChunkText = [];
+            currentChunkStart = line.offset;
+          }
+          currentChunkText.push(line.text);
+        }
+        if (currentChunkText.length > 0) {
+          transcriptsToReturn.push(currentChunkText.join(" "));
+        }
+      }
+
+      res.json({ transcript: transcriptsToReturn.length > 1 ? transcriptsToReturn : (transcriptsToReturn[0] || ""), error });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

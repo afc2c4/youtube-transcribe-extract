@@ -5,7 +5,7 @@ export interface VideoResult {
   thumbnail: string;
   author: string;
   duration: string;
-  transcript: string;
+  transcript: string | string[];
   error: string | null;
 }
 

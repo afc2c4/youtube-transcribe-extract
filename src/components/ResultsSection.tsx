@@ -7,7 +7,7 @@ interface ResultsSectionProps {
   copiedId: string | null;
   template: string;
   setTemplate: (value: string) => void;
-  onCopy: (video: VideoResult) => void;
+  onCopy: (video: VideoResult, blockIndex?: number) => void;
   onDownloadTxt: (video: VideoResult) => void;
 }
 
@@ -144,11 +144,35 @@ export function ResultsSection({
                 <td className="p-4 align-top group">
                   {video.error ? (
                     <div className="text-sm text-slate-600">-</div>
+                  ) : Array.isArray(video.transcript) ? (
+                    <div className="flex flex-col gap-2">
+                       {video.transcript.map((block, idx) => (
+                          <div key={idx} className="group relative">
+                            <div className="text-xs text-indigo-400 mb-1">Parte {idx + 1}</div>
+                            <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-24 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                              <p className="line-clamp-3 group-hover:line-clamp-none transition-all duration-300 pr-6 break-words">
+                                {template.split('{transcript}').join(block || '').split('{titulo}').join(video.title)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => onCopy(video, idx)}
+                              className="absolute top-6 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-md border border-slate-700 shadow-sm transition-all opacity-0 group-hover:opacity-100"
+                              title={`Copiar Parte ${idx + 1}`}
+                            >
+                              {copiedId === `${video.id}-${idx}` ? (
+                                <Check className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                      ))}
+                    </div>
                   ) : (
                     <div className="group relative">
                       <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap">
                         <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300 pr-6 break-words">
-                          {template.split('{transcript}').join(video.transcript || '').split('{titulo}').join(video.title)}
+                          {template.split('{transcript}').join((video.transcript as string) || '').split('{titulo}').join(video.title)}
                         </p>
                       </div>
                       <button
