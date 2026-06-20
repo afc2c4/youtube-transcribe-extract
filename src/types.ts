@@ -1,3 +1,10 @@
+export interface TranscriptBlock {
+  title: string;
+  text: string;
+  timeStartStr?: string;
+  timeStartSec?: number;
+}
+
 export interface VideoResult {
   id: string;
   title: string;
@@ -5,7 +12,7 @@ export interface VideoResult {
   thumbnail: string;
   author: string;
   duration: string;
-  transcript: string | string[];
+  transcript: string | string[] | TranscriptBlock[] | null;
   error: string | null;
 }
 

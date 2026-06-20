@@ -132,6 +132,40 @@ export function ResultsSection({
                     <div className="text-[11px] font-bold uppercase tracking-tight bg-slate-700/50 text-slate-400 px-2 py-1 rounded-md inline-block border border-slate-700/50 break-words">
                       {video.error}
                     </div>
+                  ) : Array.isArray(video.transcript) ? (
+                    <div className="flex flex-col gap-3 max-h-96 overflow-y-auto pr-1">
+                      {(video.transcript as any[]).map((block, idx) => {
+                        const isObj = typeof block === 'object' && block !== null && 'text' in block;
+                        const blockTitle = isObj ? block.title : `Parte ${idx + 1}`;
+                        const blockText = isObj ? block.text : block;
+                        const timeStr = isObj ? block.timeStartStr : undefined;
+                        const timeSec = isObj ? block.timeStartSec : undefined;
+
+                        return (
+                          <div key={idx} className="bg-[#0A0A0B]/44 p-2.5 rounded-xl border border-slate-800/60 transition-all hover:bg-[#0A0A0B]/80 hover:border-slate-700 leading-relaxed text-xs text-slate-400">
+                            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                              {timeStr && video.url && (
+                                <a
+                                  href={`${video.url}&t=${timeSec || 0}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center text-[10px] font-bold font-mono text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded transition-transform hover:scale-105"
+                                  title="Ir para este tempo no YouTube"
+                                >
+                                  {timeStr}
+                                </a>
+                              )}
+                              <span className="font-bold text-slate-400 leading-tight truncate max-w-[170px]" title={blockTitle}>
+                                {blockTitle}
+                              </span>
+                            </div>
+                            <p className="line-clamp-2 hover:line-clamp-none transition-all duration-300 select-all cursor-pointer leading-relaxed text-slate-400/90 break-words font-sans">
+                              {blockText}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-32 overflow-y-auto leading-relaxed">
                       <p className="line-clamp-4 group-hover:line-clamp-none transition-all duration-300 break-words">
@@ -145,28 +179,39 @@ export function ResultsSection({
                   {video.error ? (
                     <div className="text-sm text-slate-600">-</div>
                   ) : Array.isArray(video.transcript) ? (
-                    <div className="flex flex-col gap-2">
-                       {video.transcript.map((block, idx) => (
-                          <div key={idx} className="group relative">
-                            <div className="text-xs text-indigo-400 mb-1">Parte {idx + 1}</div>
-                            <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-24 overflow-y-auto leading-relaxed whitespace-pre-wrap">
-                              <p className="line-clamp-3 group-hover:line-clamp-none transition-all duration-300 pr-6 break-words">
-                                {template.split('{transcript}').join(block || '').split('{titulo}').join(video.title)}
-                              </p>
+                    <div className="flex flex-col gap-3 max-h-96 overflow-y-auto pr-1">
+                       {(video.transcript as any[]).map((block, idx) => {
+                          const isObj = typeof block === 'object' && block !== null && 'text' in block;
+                          const blockTitle = isObj ? block.title : `Parte ${idx + 1}`;
+                          const blockText = isObj ? block.text : block;
+                          const formattedText = template
+                            .split('{transcript}').join(blockText || '')
+                            .split('{titulo}').join(video.title);
+
+                          return (
+                            <div key={idx} className="group/item relative">
+                              <div className="text-xs text-indigo-400 font-bold mb-1 pl-1 truncate max-w-[190px]" title={blockTitle}>
+                                {blockTitle}
+                              </div>
+                              <div className="text-sm text-slate-400 bg-[#0A0A0B] p-3 rounded-xl border border-slate-800/50 max-h-24 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                                <p className="line-clamp-3 group-hover/item:line-clamp-none transition-all duration-300 pr-6 break-words">
+                                  {formattedText}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => onCopy(video, idx)}
+                                className="absolute top-6 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-md border border-slate-700 shadow-sm transition-all opacity-0 group-hover/item:opacity-100 focus:opacity-100"
+                                title={`Copiar ${blockTitle}`}
+                              >
+                                {copiedId === `${video.id}-${idx}` ? (
+                                  <Check className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </button>
                             </div>
-                            <button
-                              onClick={() => onCopy(video, idx)}
-                              className="absolute top-6 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-md border border-slate-700 shadow-sm transition-all opacity-0 group-hover:opacity-100"
-                              title={`Copiar Parte ${idx + 1}`}
-                            >
-                              {copiedId === `${video.id}-${idx}` ? (
-                                <Check className="w-4 h-4 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                      ))}
+                          );
+                      })}
                     </div>
                   ) : (
                     <div className="group relative">

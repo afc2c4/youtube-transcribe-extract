@@ -9,9 +9,21 @@ interface PlaylistInputProps {
   total: number;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
+  splitStrategy: 'chapters' | '15min' | 'none';
+  setSplitStrategy: (val: 'chapters' | '15min' | 'none') => void;
 }
 
-export function PlaylistInput({ url, setUrl, loading, progress, total, error, onSubmit }: PlaylistInputProps) {
+export function PlaylistInput({ 
+  url, 
+  setUrl, 
+  loading, 
+  progress, 
+  total, 
+  error, 
+  onSubmit,
+  splitStrategy,
+  setSplitStrategy
+}: PlaylistInputProps) {
   const percentage = total > 0 ? Math.round((progress / total) * 100) : 0;
 
   return (
@@ -68,6 +80,34 @@ export function PlaylistInput({ url, setUrl, loading, progress, total, error, on
             <p>{error}</p>
          </div>
       )}
+
+      <div className="mt-6 border-t border-slate-850 pt-6">
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5">
+          Opção de Divisão da Transcrição
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { id: 'chapters', label: 'Dividir por Capítulos / Timestamps', desc: 'Usa a grade de conteúdo/cronograma da descrição do vídeo se disponível (padrão)' },
+            { id: '15min', label: 'Dividir a cada 15 min', desc: 'Divide de forma homogênea a cada 15 minutos de conteúdo' },
+            { id: 'none', label: 'Não Dividir', desc: 'Retorna um único bloco para toda a transcrição' }
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              disabled={loading}
+              onClick={() => setSplitStrategy(opt.id as any)}
+              className={`flex flex-col text-left p-3.5 rounded-xl border text-xs transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                splitStrategy === opt.id
+                  ? 'bg-indigo-500/10 border-indigo-500/80 text-indigo-300 shadow-sm shadow-indigo-500/5'
+                  : 'bg-[#0A0A0B]/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+              }`}
+            >
+              <span className="font-bold text-sm mb-1">{opt.label}</span>
+              <span className="text-[11px] text-slate-500 leading-snug">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

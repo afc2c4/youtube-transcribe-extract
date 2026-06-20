@@ -134,6 +134,118 @@ async function fetchPlaylist(inputUrl: string) {
   }
 }
 
+async function fetchVideoDescriptionAndTitle(videoId: string) {
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Cookie": "SOCS=CAI; CONSENT=YES+cb.20230101-00-p0.en+FX+000;"
+  };
+  try {
+    const html = await (await fetch(`https://www.youtube.com/watch?v=${videoId}`, { headers })).text();
+    
+    function findKey(obj: any, key: string): any {
+      if (!obj || typeof obj !== "object") return null;
+      if (obj[key] !== undefined) return obj[key];
+      for (const k in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+          const res = findKey(obj[k], key);
+          if (res) return res;
+        }
+      }
+      return null;
+    }
+
+    let description = "";
+    let title = "";
+
+    // Check ytInitialData
+    const startString = "var ytInitialData = ";
+    const startIndex = html.indexOf(startString);
+    if (startIndex !== -1) {
+      let jsonString = html.substring(startIndex + startString.length);
+      const endIndex = jsonString.indexOf(";</script>");
+      if (endIndex !== -1) {
+        jsonString = jsonString.substring(0, endIndex);
+      }
+      try {
+        const data = JSON.parse(jsonString);
+        const descObj = findKey(data, "attributedDescription");
+        if (descObj && descObj.content) {
+          description = descObj.content;
+        }
+      } catch (e) {}
+    }
+
+    // Check ytInitialPlayerResponse
+    const playerToken = "var ytInitialPlayerResponse = ";
+    let playerIdx = html.indexOf(playerToken);
+    if (playerIdx === -1) {
+      playerIdx = html.indexOf("ytInitialPlayerResponse = ");
+    }
+    if (playerIdx !== -1) {
+      const jsonStart = html.indexOf("{", playerIdx);
+      if (jsonStart !== -1) {
+        let depth = 0;
+        let jsonString = "";
+        for (let i = jsonStart; i < html.length; i++) {
+          if (html[i] === "{") depth++;
+          else if (html[i] === "}") {
+            depth--;
+            if (depth === 0) {
+              jsonString = html.slice(jsonStart, i + 1);
+              break;
+            }
+          }
+        }
+        try {
+          const data = JSON.parse(jsonString);
+          if (!description) {
+            const descObj = findKey(data, "attributedDescription");
+            if (descObj && descObj.content) {
+              description = descObj.content;
+            } else if (data.videoDetails && data.videoDetails.shortDescription) {
+              description = data.videoDetails.shortDescription;
+            }
+          }
+          if (data.videoDetails && data.videoDetails.title) {
+            title = data.videoDetails.title;
+          }
+        } catch (e) {}
+      }
+    }
+
+    return { description, title };
+  } catch (err) {
+    console.error("Failed to extract description for video:", videoId, err);
+    return { description: "", title: "" };
+  }
+}
+
+function parseChapters(description: string) {
+  const lines = description.split(/\r?\n/);
+  const chapters = [];
+  const regex = /(?:\[|\()?(\d{1,2}:)?(\d{1,2}):(\d{2})(?:\]|\))?\s*[-–—:]?\s*(.+)/;
+  
+  for (const line of lines) {
+    const match = line.match(regex);
+    if (match) {
+      const hStr = match[1];
+      const mStr = match[2];
+      const sStr = match[3];
+      const title = match[4].trim();
+      
+      const hours = hStr ? parseInt(hStr.replace(":", "")) : 0;
+      const minutes = parseInt(mStr);
+      const seconds = parseInt(sStr);
+      
+      const timeSec = hours * 3600 + minutes * 60 + seconds;
+      chapters.push({ timeSec, timeStr: (hStr || "") + mStr + ":" + sStr, title });
+    }
+  }
+  
+  chapters.sort((a, b) => a.timeSec - b.timeSec);
+  return chapters;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -156,7 +268,7 @@ async function startServer() {
 
   app.post("/api/video/transcript", async (req, res) => {
     try {
-      const { videoId } = req.body;
+      const { videoId, splitStrategy = "chapters" } = req.body;
       if (!videoId) {
         return res.status(400).json({ error: "videoId is required" });
       }
@@ -166,37 +278,136 @@ async function startServer() {
         const transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
         transcriptOriginal = transcriptData;
       } catch (err: any) {
-        if (err.message.includes("Transcript is disabled")) {
+        if (err.message && err.message.includes("Transcript is disabled")) {
           error = "O YouTube bloqueou o acesso à transcrição para este IP (proteção anti-bot). As transcrições automáticas não podem ser acessadas por servidores Cloud no momento.";
         } else {
           error = "Transcrição indisponível ou inacessível.";
         }
       }
 
-      let transcriptsToReturn: string[] = [];
-      if (transcriptOriginal && transcriptOriginal.length > 0) {
-        // Splitting into 15 minutes chunks
-        const averageDelta = transcriptOriginal[transcriptOriginal.length - 1].offset / transcriptOriginal.length;
-        const isMs = averageDelta > 50; 
+      if (!transcriptOriginal || transcriptOriginal.length === 0) {
+        return res.json({ transcript: null, error: error || "Não foi possível obter a transcrição." });
+      }
+
+      // Check if transcript is in MS
+      const averageDelta = transcriptOriginal[transcriptOriginal.length - 1].offset / transcriptOriginal.length;
+      const isMs = averageDelta > 50;
+
+      interface TranscriptItem {
+        title: string;
+        text: string;
+        timeStartStr: string;
+        timeStartSec: number;
+      }
+
+      let blocksToReturn: TranscriptItem[] = [];
+
+      const splitStrategyFallback15Min = () => {
         const CHUNK_LIMIT = isMs ? 15 * 60 * 1000 : 15 * 60;
-        
         let currentChunkText: string[] = [];
         let currentChunkStart = 0;
+        let pIdx = 1;
+
         for (const line of transcriptOriginal) {
           if (line.offset - currentChunkStart > CHUNK_LIMIT && currentChunkText.length > 0) {
-            transcriptsToReturn.push(currentChunkText.join(" "));
+            const partSec = isMs ? currentChunkStart / 1000 : currentChunkStart;
+            const h = Math.floor(partSec / 3600);
+            const m = Math.floor((partSec % 3600) / 60);
+            const s = Math.floor(partSec % 60);
+            const formattedTime = (h > 0 ? `${h}:` : "") + `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+
+            blocksToReturn.push({
+              title: `Parte ${pIdx} (${formattedTime})`,
+              text: currentChunkText.join(" "),
+              timeStartStr: formattedTime,
+              timeStartSec: partSec
+            });
+            pIdx++;
             currentChunkText = [];
             currentChunkStart = line.offset;
           }
           currentChunkText.push(line.text);
         }
+
         if (currentChunkText.length > 0) {
-          transcriptsToReturn.push(currentChunkText.join(" "));
+          const partSec = isMs ? currentChunkStart / 1000 : currentChunkStart;
+          const h = Math.floor(partSec / 3600);
+          const m = Math.floor((partSec % 3600) / 60);
+          const s = Math.floor(partSec % 60);
+          const formattedTime = (h > 0 ? `${h}:` : "") + `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+
+          blocksToReturn.push({
+            title: `Parte ${pIdx} (${formattedTime})`,
+            text: currentChunkText.join(" "),
+            timeStartStr: formattedTime,
+            timeStartSec: partSec
+          });
         }
+      };
+
+      if (splitStrategy === "none") {
+        const fullText = transcriptOriginal.map((line: any) => line.text).join(" ");
+        blocksToReturn.push({
+          title: "Transcrição Completa",
+          text: fullText,
+          timeStartStr: "00:00",
+          timeStartSec: 0
+        });
+      } else if (splitStrategy === "chapters") {
+        // Fetch chapters from description
+        let chapters: { timeSec: number; timeStr: string; title: string; }[] = [];
+        try {
+          const { description } = await fetchVideoDescriptionAndTitle(videoId);
+          if (description) {
+            chapters = parseChapters(description);
+          }
+        } catch (e) {
+          console.error("Erro ao buscar capítulos:", e);
+        }
+
+        if (chapters.length > 0) {
+          // Splitting using custom chapters!
+          const bins = chapters.map(c => ({
+            title: c.title,
+            timeStartStr: c.timeStr,
+            timeStartSec: c.timeSec,
+            lines: [] as string[]
+          }));
+
+          for (const line of transcriptOriginal) {
+            const lineSec = isMs ? line.offset / 1000 : line.offset;
+            
+            let activeBinIdx = 0;
+            for (let i = 0; i < chapters.length; i++) {
+              if (lineSec >= chapters[i].timeSec) {
+                activeBinIdx = i;
+              } else {
+                break;
+              }
+            }
+            bins[activeBinIdx].lines.push(line.text);
+          }
+
+          blocksToReturn = bins
+            .filter(b => b.lines.length > 0)
+            .map(b => ({
+              title: b.title,
+              text: b.lines.join(" "),
+              timeStartStr: b.timeStartStr,
+              timeStartSec: b.timeStartSec
+            }));
+        } else {
+          // Standard fallback to 15min chunks if no chapters were parsed
+          splitStrategyFallback15Min();
+        }
+      } else {
+        // Standard fixed 15-minute chunk strategy
+        splitStrategyFallback15Min();
       }
 
-      res.json({ transcript: transcriptsToReturn.length > 1 ? transcriptsToReturn : (transcriptsToReturn[0] || ""), error });
+      res.json({ transcript: blocksToReturn, error });
     } catch (err: any) {
+      console.error(err);
       res.status(500).json({ error: err.message });
     }
   });
