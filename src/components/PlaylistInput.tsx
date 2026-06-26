@@ -9,8 +9,10 @@ interface PlaylistInputProps {
   total: number;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
-  splitStrategy: 'chapters' | '15min' | 'none';
-  setSplitStrategy: (val: 'chapters' | '15min' | 'none') => void;
+  splitStrategy: 'chapters' | 'interval' | 'none';
+  setSplitStrategy: (val: 'chapters' | 'interval' | 'none') => void;
+  splitInterval: number;
+  setSplitInterval: (val: number) => void;
 }
 
 export function PlaylistInput({ 
@@ -22,7 +24,9 @@ export function PlaylistInput({
   error, 
   onSubmit,
   splitStrategy,
-  setSplitStrategy
+  setSplitStrategy,
+  splitInterval,
+  setSplitInterval
 }: PlaylistInputProps) {
   const percentage = total > 0 ? Math.round((progress / total) * 100) : 0;
 
@@ -87,8 +91,8 @@ export function PlaylistInput({
         </label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { id: 'chapters', label: 'Dividir por Capítulos / Timestamps', desc: 'Usa a grade de conteúdo/cronograma da descrição do vídeo se disponível (padrão)' },
-            { id: '15min', label: 'Dividir a cada 15 min', desc: 'Divide de forma homogênea a cada 15 minutos de conteúdo' },
+            { id: 'chapters', label: 'Dividir por Capítulos', desc: 'Usa a grade de conteúdo/cronograma (padrão)' },
+            { id: 'interval', label: 'Dividir por Intervalo', desc: 'Divide de forma homogênea a cada X minutos' },
             { id: 'none', label: 'Não Dividir', desc: 'Retorna um único bloco para toda a transcrição' }
           ].map((opt) => (
             <button
@@ -107,6 +111,25 @@ export function PlaylistInput({
             </button>
           ))}
         </div>
+        
+        {splitStrategy === 'interval' && (
+          <div className="mt-4 flex items-center gap-3 p-4 bg-[#0A0A0B]/40 rounded-xl border border-slate-800">
+            <label className="text-sm text-slate-400 font-medium">
+              Intervalo de divisão:
+            </label>
+            <div className="flex items-center gap-2">
+              <input 
+                type="number"
+                min="1"
+                max="120"
+                value={splitInterval}
+                onChange={(e) => setSplitInterval(Math.max(1, parseInt(e.target.value) || 15))}
+                className="w-20 bg-[#121214] border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 text-center"
+              />
+              <span className="text-sm text-slate-500">minutos</span>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

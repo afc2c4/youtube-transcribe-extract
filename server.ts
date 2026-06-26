@@ -268,7 +268,7 @@ async function startServer() {
 
   app.post("/api/video/transcript", async (req, res) => {
     try {
-      const { videoId, splitStrategy = "chapters" } = req.body;
+      const { videoId, splitStrategy = "chapters", splitInterval = 15 } = req.body;
       if (!videoId) {
         return res.status(400).json({ error: "videoId is required" });
       }
@@ -302,8 +302,9 @@ async function startServer() {
 
       let blocksToReturn: TranscriptItem[] = [];
 
-      const splitStrategyFallback15Min = () => {
-        const CHUNK_LIMIT = isMs ? 15 * 60 * 1000 : 15 * 60;
+      const splitStrategyFallbackInterval = () => {
+        const intervalInMinutes = Number(splitInterval) || 15;
+        const CHUNK_LIMIT = isMs ? intervalInMinutes * 60 * 1000 : intervalInMinutes * 60;
         let currentChunkText: string[] = [];
         let currentChunkStart = 0;
         let pIdx = 1;
@@ -397,12 +398,12 @@ async function startServer() {
               timeStartSec: b.timeStartSec
             }));
         } else {
-          // Standard fallback to 15min chunks if no chapters were parsed
-          splitStrategyFallback15Min();
+          // Standard fallback to chunk strategy if no chapters were parsed
+          splitStrategyFallbackInterval();
         }
       } else {
-        // Standard fixed 15-minute chunk strategy
-        splitStrategyFallback15Min();
+        // Standard chunk strategy
+        splitStrategyFallbackInterval();
       }
 
       res.json({ transcript: blocksToReturn, error });

@@ -12,7 +12,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlaylistResponse | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [splitStrategy, setSplitStrategy] = useState<'chapters' | '15min' | 'none'>('chapters');
+  const [splitStrategy, setSplitStrategy] = useState<'chapters' | 'interval' | 'none'>('chapters');
+  const [splitInterval, setSplitInterval] = useState<number>(15);
   const [template, setTemplate] = useState(() => {
     return localStorage.getItem('transcriptTemplate') || 'A transcrição é {transcript}';
   });
@@ -78,7 +79,7 @@ export default function App() {
               const res = await fetch('/api/video/transcript', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoId: item.id, splitStrategy }),
+                body: JSON.stringify({ videoId: item.id, splitStrategy, splitInterval }),
               });
               const tData = await res.json();
 
@@ -161,6 +162,8 @@ export default function App() {
           onSubmit={handleSubmit} 
           splitStrategy={splitStrategy}
           setSplitStrategy={setSplitStrategy}
+          splitInterval={splitInterval}
+          setSplitInterval={setSplitInterval}
         />
         {data && (
           <ResultsSection 
